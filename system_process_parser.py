@@ -6,7 +6,7 @@ def get_system_status():
     # Run 'ps aux' command and capture output
     output = subprocess.check_output(['ps', 'aux']).decode().split('\n')
 
-    # Initialize variables_
+    # Initialize variables
     users = []
     user_processes = {}
     total_processes = 0
