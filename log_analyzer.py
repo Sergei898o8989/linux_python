@@ -2,38 +2,46 @@ import argparse
 import os
 import glob
 import json
-
 import re
+from dataclasses import dataclass
 from collections import Counter, defaultdict
-from operator import itemgetter
 
 LOG_PATTERN = r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) - - \[(.+)\] "([A-Z]+) (.*?)' \
               r' HTTP/1\.[01]" \d{3} \d+ ".*?" ".*?" (\d+)'
-METHODS = ['GET', 'POST', 'PUT', 'HEAD', 'OPTIONS', 'DELETE']
+METHODS = ('GET', 'POST', 'PUT', 'HEAD', 'OPTIONS', 'DELETE')
+
+
+@dataclass
+class LogEntry:
+    ip: str
+    timestamp: str
+    method: str
+    url: str
+    duration: int
 
 
 def analyze_log_file(file_path):
-    with open(file_path, 'r') as f:
-        log_data = f.read()
-
-    log_entries = re.findall(LOG_PATTERN, log_data)
-
     stats = defaultdict(int)
     ip_counter = Counter()
     longest_requests = []
 
-    for entry in log_entries:
-        ip, timestamp, method, url, duration = entry
-        stats['total_requests'] += 1
-        if method in METHODS:
-            stats[method] += 1
-        ip_counter[ip] += 1
-        longest_requests.append((ip, timestamp, method, url, int(duration)))
+    with open(file_path, 'r') as f:
+        for line in f:
+            match = re.search(LOG_PATTERN, line)
+            if match:
+                ip, timestamp, method, url, duration = match.groups()
+                log_entry = LogEntry(ip, timestamp, method, url, int(duration))
+
+                stats['total_requests'] += 1
+                if log_entry.method in METHODS:
+                    stats[log_entry.method] += 1
+                ip_counter[log_entry.ip] += 1
+                longest_requests.append(log_entry)
 
     stats['top_ips'] = {ip: count for ip, count in ip_counter.most_common(3)}
-    stats['top_longest'] = [{'ip': ip, 'date': f"[{timestamp}]", 'method': method, 'url': url, 'duration': duration} for
-                            ip, timestamp, method, url, duration in
-                            sorted(longest_requests, key=itemgetter(4), reverse=True)[:3]]
+    stats['top_longest'] = [{'ip': entry.ip, 'date': f"[{entry.timestamp}]", 'method': entry.method, 'url': entry.url,
+                             'duration': entry.duration} for
+                            entry in sorted(longest_requests, key=lambda x: x.duration, reverse=True)[:3]]
     stats['total_stat'] = {key: value for key, value in stats.items() if key in METHODS}
 
     return stats
